@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"net"
 	"os"
@@ -498,4 +499,97 @@ func nextNode(it iterator.Iterator) *Node {
 func (db *DB) Close() {
 	close(db.quit)
 	db.lvl.Close()
+}
+
+func whitelistKey(id ID, nodeType string) []byte {
+	key := append([]byte("whitelist:"), id[:]...)
+	key = append(key, ':')
+	key = append(key, nodeType...)
+	return key
+}
+
+func (db *DB) AddWhitelist(whitelistType, enode string) error {
+	var whitelist map[string][]string
+	value, err := db.lvl.Get([]byte("whitelist"), nil)
+	if err == errors.ErrNotFound {
+		whitelist[whitelistType] = []string{enode}
+	} else {
+		var s string
+		if err = rlp.DecodeBytes(value, &s); err != nil {
+			return err
+		}
+		if err = json.Unmarshal([]byte(s), &whitelist); err != nil {
+			return err
+		}
+		if _, ok := whitelist[whitelistType]; ok {
+			flag := true
+			for _, v := range whitelist[whitelistType] {
+				if v == enode {
+					flag = false
+					break
+				}
+			}
+			if flag {
+				whitelist[whitelistType] = append(whitelist[whitelistType], enode)
+			}
+		} else {
+			whitelist[whitelistType] = []string{enode}
+		}
+	}
+	b, _ := json.Marshal(whitelist)
+	blob, err := rlp.EncodeToBytes(string(b))
+	if err != nil {
+		return err
+	}
+	if err = db.lvl.Put([]byte("whitelist"), blob, nil); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (db *DB) RemoveWhitelist(whitelistType, enode string) error {
+	value, err := db.lvl.Get([]byte("whitelist"), nil)
+	if err != nil {
+		return err
+	}
+	var s string
+	var whitelist map[string][]string
+	if err = rlp.DecodeBytes(value, &s); err != nil {
+		return err
+	}
+	if err = json.Unmarshal([]byte(s), &whitelist); err != nil {
+		return err
+	}
+	if _, ok := whitelist[whitelistType]; ok {
+		for k, v := range whitelist[whitelistType] {
+			if v == enode {
+				whitelist[whitelistType] = append(whitelist[whitelistType][:k], whitelist[whitelistType][k+1:]...)
+			}
+		}
+	}
+	b, _ := json.Marshal(whitelist)
+	blob, err := rlp.EncodeToBytes(string(b))
+	if err != nil {
+		return err
+	}
+	if err = db.lvl.Put([]byte("whitelist"), blob, nil); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (db *DB) GetWhitelistInfo() map[string][]string {
+	value, err := db.lvl.Get([]byte("whitelist"), nil)
+	if err != nil {
+		return nil
+	}
+	var s string
+	var whitelist map[string][]string
+	if err = rlp.DecodeBytes(value, &s); err != nil {
+		return nil
+	}
+	if err = json.Unmarshal([]byte(s), &whitelist); err != nil {
+		return nil
+	}
+	return whitelist
 }

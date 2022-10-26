@@ -166,6 +166,16 @@ web3._extend({
 			params: 1
 		}),
 		new web3._extend.Method({
+			name: 'addWhitelist',
+			call: 'admin_addWhitelist',
+			params: 2
+		}),
+		new web3._extend.Method({
+			name: 'removeWhitelist',
+			call: 'admin_removeWhitelist',
+			params: 2
+		}),
+		new web3._extend.Method({
 			name: 'addTrustedPeer',
 			call: 'admin_addTrustedPeer',
 			params: 1
@@ -232,6 +242,10 @@ web3._extend({
 		new web3._extend.Property({
 			name: 'peers',
 			getter: 'admin_peers'
+		}),
+		new web3._extend.Property({
+			name: 'whitelist',
+			getter: 'admin_whitelist'
 		}),
 		new web3._extend.Property({
 			name: 'datadir',

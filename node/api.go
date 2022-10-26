@@ -94,6 +94,26 @@ func (api *privateAdminAPI) RemovePeer(url string) (bool, error) {
 	return true, nil
 }
 
+func (api *privateAdminAPI) AddWhitelist(whitelistType, enode string) (bool, error) {
+	// Make sure the server is running, fail otherwise
+	server := api.node.Server()
+	if server == nil {
+		return false, ErrNodeStopped
+	}
+	server.AddWhitelist(whitelistType, enode)
+	return true, nil
+}
+
+func (api *privateAdminAPI) RemoveWhitelist(whitelistType, enode string) (bool, error) {
+	// Make sure the server is running, fail otherwise
+	server := api.node.Server()
+	if server == nil {
+		return false, ErrNodeStopped
+	}
+	server.RemoveWhitelist(whitelistType, enode)
+	return true, nil
+}
+
 // AddTrustedPeer allows a remote node to always connect, even if slots are full
 func (api *privateAdminAPI) AddTrustedPeer(url string) (bool, error) {
 	// Make sure the server is running, fail otherwise
@@ -309,6 +329,14 @@ func (api *publicAdminAPI) Peers() ([]*p2p.PeerInfo, error) {
 		return nil, ErrNodeStopped
 	}
 	return server.PeersInfo(), nil
+}
+
+func (api *publicAdminAPI) Whitelist() (map[string][]string, error) {
+	server := api.node.Server()
+	if server == nil {
+		return nil, ErrNodeStopped
+	}
+	return server.WhitelistInfo(), nil
 }
 
 // NodeInfo retrieves all the information we know about the host node at the

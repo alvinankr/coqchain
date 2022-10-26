@@ -353,6 +353,20 @@ func (srv *Server) RemovePeer(node *enode.Node) {
 	}
 }
 
+func (srv *Server) AddWhitelist(whitelistType, enode string) {
+	err := srv.nodedb.AddWhitelist(whitelistType, enode)
+	if err != nil {
+		return
+	}
+}
+
+func (srv *Server) RemoveWhitelist(whitelistType, enode string) {
+	err := srv.nodedb.RemoveWhitelist(whitelistType, enode)
+	if err != nil {
+		return
+	}
+}
+
 // AddTrustedPeer adds the given node to a reserved trusted list which allows the
 // node to always connect, even if the slot are full.
 func (srv *Server) AddTrustedPeer(node *enode.Node) {
@@ -1098,6 +1112,10 @@ func (srv *Server) NodeInfo() *NodeInfo {
 		}
 	}
 	return info
+}
+
+func (srv *Server) WhitelistInfo() map[string][]string {
+	return srv.nodedb.GetWhitelistInfo()
 }
 
 // PeersInfo returns an array of metadata objects describing connected peers.
