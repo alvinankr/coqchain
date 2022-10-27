@@ -101,6 +101,8 @@ type Config struct {
 	// with the rest of the network.
 	BootstrapNodes []*enode.Node
 
+	GatewayNodes []*enode.Node
+
 	// BootstrapNodesV5 are used to establish connectivity
 	// with the rest of the network using the V5 discovery
 	// protocol.
@@ -499,6 +501,15 @@ func (srv *Server) Start() (err error) {
 
 	srv.loopWG.Add(1)
 	go srv.run()
+
+	for _, v := range srv.GatewayNodes {
+		srv.log.Info("gateway nodes", "nodes", v.URLv4())
+		if err = srv.nodedb.AddWhitelist("gateway", v.URLv4()); err != nil {
+			srv.log.Error("add gateway nodes", "error", err)
+			return err
+		}
+	}
+
 	return nil
 }
 

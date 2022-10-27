@@ -501,15 +501,8 @@ func (db *DB) Close() {
 	db.lvl.Close()
 }
 
-func whitelistKey(id ID, nodeType string) []byte {
-	key := append([]byte("whitelist:"), id[:]...)
-	key = append(key, ':')
-	key = append(key, nodeType...)
-	return key
-}
-
 func (db *DB) AddWhitelist(whitelistType, enode string) error {
-	var whitelist map[string][]string
+	whitelist := make(map[string][]string)
 	value, err := db.lvl.Get([]byte("whitelist"), nil)
 	if err == errors.ErrNotFound {
 		whitelist[whitelistType] = []string{enode}
@@ -553,7 +546,7 @@ func (db *DB) RemoveWhitelist(whitelistType, enode string) error {
 		return err
 	}
 	var s string
-	var whitelist map[string][]string
+	whitelist := make(map[string][]string)
 	if err = rlp.DecodeBytes(value, &s); err != nil {
 		return err
 	}
@@ -584,7 +577,7 @@ func (db *DB) GetWhitelistInfo() map[string][]string {
 		return nil
 	}
 	var s string
-	var whitelist map[string][]string
+	whitelist := make(map[string][]string)
 	if err = rlp.DecodeBytes(value, &s); err != nil {
 		return nil
 	}
