@@ -356,10 +356,28 @@ func (srv *Server) RemovePeer(node *enode.Node) {
 }
 
 func (srv *Server) AddWhitelist(whitelistType, enode string) {
-	err := srv.nodedb.AddWhitelist(whitelistType, enode)
-	if err != nil {
+	peerInfo := srv.PeersInfo()
+	if len(peerInfo) == 0 {
+		srv.log.Info("peers info length is 0")
 		return
 	}
+	flag := false
+	for _, v := range peerInfo {
+		if v.Enode == enode {
+			flag = true
+			break
+		}
+	}
+	if !flag {
+		srv.log.Info("whitelist validation failed")
+		return
+	}
+	err := srv.nodedb.AddWhitelist(whitelistType, enode)
+	if err != nil {
+		srv.log.Error("add whitelist failed", "error", err)
+		return
+	}
+	srv.log.Info("add whitelist", "type", whitelistType, "enode", enode)
 }
 
 func (srv *Server) RemoveWhitelist(whitelistType, enode string) {
