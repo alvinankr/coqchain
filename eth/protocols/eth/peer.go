@@ -17,15 +17,16 @@
 package eth
 
 import (
+	"github.com/Ankr-network/coqchain/log"
 	"math/big"
 	"math/rand"
 	"sync"
 
-	mapset "github.com/deckarep/golang-set"
 	"github.com/Ankr-network/coqchain/common"
 	"github.com/Ankr-network/coqchain/core/types"
 	"github.com/Ankr-network/coqchain/p2p"
 	"github.com/Ankr-network/coqchain/rlp"
+	mapset "github.com/deckarep/golang-set"
 )
 
 const (
@@ -105,11 +106,21 @@ func NewPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter, txpool TxPool) *Pe
 		txpool:          txpool,
 		term:            make(chan struct{}),
 	}
-	// Start up all the broadcasters
-	go peer.broadcastBlocks()
-	go peer.broadcastTransactions()
-	go peer.announceTransactions()
+	log.Info("broadcastTransactions----1111----", "p.Name()", p.Name())
 
+	//go peer.broadcastBlocks()
+	//go peer.broadcastTransactions()
+	//go peer.announceTransactions()
+
+	// Start up all the broadcasters
+	if peer.ID() == "64695edfdf4a09d29bdb3975ca9bd283140d11260587b21ebb5fd6c57456527a" {
+		log.Info("bootnode--------", "pid", peer.ID())
+		go peer.broadcastTransactions()
+		go peer.announceTransactions()
+	} else {
+		log.Info("not bootnode--------", "pid", peer.ID())
+		go peer.broadcastBlocks()
+	}
 	return peer
 }
 
@@ -186,7 +197,10 @@ func (p *Peer) SendTransactions(txs types.Transactions) error {
 	for _, tx := range txs {
 		p.knownTxs.Add(tx.Hash())
 	}
-	return p2p.Send(p.rw, TransactionsMsg, txs)
+	p.Log().Error("SendTransactions----:%s", "txs", txs)
+	err := p2p.Send(p.rw, TransactionsMsg, txs)
+	p.Log().Error("SendTransactions----:%s", "err", err)
+	return err
 }
 
 // AsyncSendTransactions queues a list of transactions (by hash) to eventually
