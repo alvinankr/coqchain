@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"sort"
 	"strings"
 
 	"github.com/Ankr-network/coqchain/common"
@@ -38,6 +39,7 @@ import (
 	"github.com/Ankr-network/coqchain/params"
 	"github.com/Ankr-network/coqchain/rlp"
 	"github.com/Ankr-network/coqchain/trie"
+	"github.com/Ankr-network/coqchain/utils/staker"
 )
 
 //go:generate gencodec -type Genesis -field-override genesisSpecMarshaling -out gen_genesis.go
@@ -273,13 +275,33 @@ func getSignerBalance(statedb *state.StateDB, signer common.Address) *big.Int {
 
 func initSystemContract(statedb *state.StateDB, g *Genesis) {
 
-	statedb.AddBalance(contracts.SlashContract.Address, big.NewInt(0))
-	sc, _ := hex.DecodeString(contracts.SlashContract.Code)
-	statedb.SetCode(contracts.SlashContract.Address, sc)
-	statedb.SetNonce(contracts.SlashContract.Address, 0)
+	// initAccountState(statedb, g)
 
-	threshold := g.Config.Posa.SealerBalanceThreshold
+	if g.Config != nil {
+		if g.Config.Posa != nil {
+			statedb.AddBalance(contracts.SlashContract.Address, big.NewInt(0))
+			sc, _ := hex.DecodeString(contracts.SlashContract.Code)
+			statedb.SetCode(contracts.SlashContract.Address, sc)
+			statedb.SetNonce(contracts.SlashContract.Address, 0)
 
+			initAccountState(statedb, g)
+
+			count := (len(g.ExtraData) - 32 - 65) / common.AddressLength
+			var validatorList Addrs = make([]common.Address, count)
+			for i := 0; i < count; i++ {
+				copy(validatorList[i][:], g.ExtraData[32+i*common.AddressLength:])
+			}
+			sort.Sort(validatorList)
+			staker.Constructor(statedb, validatorList, g.Config.Posa)
+		} else {
+			initAccountState(statedb, g)
+		}
+	} else {
+		initAccountState(statedb, g)
+	}
+}
+
+func initAccountState(statedb *state.StateDB, g *Genesis) {
 	for addr, account := range g.Alloc {
 		statedb.AddBalance(addr, account.Balance)
 		statedb.SetCode(addr, account.Code)
@@ -287,26 +309,6 @@ func initSystemContract(statedb *state.StateDB, g *Genesis) {
 		for key, value := range account.Storage {
 			statedb.SetState(addr, key, value)
 		}
-	}
-
-	if threshold.Uint64() > 0 {
-		var signerCnt int64 = 0
-		slot0Hash := common.BigToHash(big.NewInt(0))
-		ks := crypto.NewKeccakState()
-		for addr, account := range g.Alloc {
-			if account.Balance.Cmp(threshold) > 0 {
-				statedb.SubBalance(addr, threshold)
-				addr2Hash := addr.Hash()
-				keys := append([]byte{}, addr2Hash[:]...)
-				keys = append(keys, slot0Hash[:]...)
-				ks.Reset()
-				ks.Write(keys[:])
-				stateAddr := ks.Sum(nil)
-				statedb.SetState(contracts.SlashAddr, common.BytesToHash(stateAddr), common.BigToHash(threshold))
-				signerCnt++
-			}
-		}
-		statedb.AddBalance(contracts.SlashAddr, big.NewInt(0).Mul(big.NewInt(signerCnt), threshold))
 	}
 }
 
@@ -322,6 +324,7 @@ func (g *Genesis) ToBlock(db ethdb.Database) *types.Block {
 	}
 
 	initSystemContract(statedb, g)
+
 	root := statedb.IntermediateRoot()
 	head := &types.Header{
 		Number:     new(big.Int).SetUint64(g.Number),
@@ -399,6 +402,7 @@ func GenesisBlockForTesting(db ethdb.Database, addr common.Address, balance *big
 	g := Genesis{
 		Alloc:   GenesisAlloc{addr: {Balance: balance}},
 		BaseFee: big.NewInt(params.InitialBaseFee),
+		Config:  params.AllEthashProtocolChanges,
 	}
 	return g.MustCommit(db)
 }
@@ -412,6 +416,13 @@ func DefaultGenesisBlock() *Genesis {
 		GasLimit:   5000,
 		Difficulty: big.NewInt(17179869184),
 		Alloc:      decodePrealloc(mainnetAllocData),
+	}
+}
+
+// GenesisForTest creates and writes a block in which addr has the given wei balance.
+func GenesisForTest() *Genesis {
+	return &Genesis{
+		Config: params.AllEthashProtocolChanges,
 	}
 }
 
@@ -454,6 +465,33 @@ func DeveloperGenesisBlock(period uint64, gasLimit uint64, faucet common.Address
 			// 0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007
 			common.HexToAddress("0x4915f56a21F1f2e651f8130c5a9257Cd429c6136"): {Balance: amt},
 			faucet: {Balance: amt},
+		},
+	}
+}
+
+// DeveloperGenesisBlock returns the 'geth --dev' genesis block.
+func DeveloperGenesisBlockEthash(period uint64, gasLimit uint64, faucet common.Address) *Genesis {
+	// Override the default period to the user requested one
+	config := *params.AllEthashProtocolChanges
+
+	// Assemble and return the genesis with the precompiles and faucet pre-funded
+	return &Genesis{
+		Config:     &config,
+		ExtraData:  append(append(make([]byte, 32), faucet[:]...), make([]byte, crypto.SignatureLength)...),
+		GasLimit:   gasLimit,
+		BaseFee:    big.NewInt(params.InitialBaseFee),
+		Difficulty: big.NewInt(1),
+		Alloc: map[common.Address]GenesisAccount{
+			common.BytesToAddress([]byte{1}): {Balance: big.NewInt(1)}, // ECRecover
+			common.BytesToAddress([]byte{2}): {Balance: big.NewInt(1)}, // SHA256
+			common.BytesToAddress([]byte{3}): {Balance: big.NewInt(1)}, // RIPEMD
+			common.BytesToAddress([]byte{4}): {Balance: big.NewInt(1)}, // Identity
+			common.BytesToAddress([]byte{5}): {Balance: big.NewInt(1)}, // ModExp
+			common.BytesToAddress([]byte{6}): {Balance: big.NewInt(1)}, // ECAdd
+			common.BytesToAddress([]byte{7}): {Balance: big.NewInt(1)}, // ECScalarMul
+			common.BytesToAddress([]byte{8}): {Balance: big.NewInt(1)}, // ECPairing
+			common.BytesToAddress([]byte{9}): {Balance: big.NewInt(1)}, // BLAKE2b
+			faucet:                           {Balance: new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 256), big.NewInt(9))},
 		},
 	}
 }
